@@ -11,10 +11,13 @@ import net.levelz.network.packet.*;
 import net.levelz.registry.EnchantmentRegistry;
 import net.levelz.registry.EnchantmentZ;
 import net.levelz.screen.LevelScreen;
+import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 import java.util.List;
@@ -143,6 +146,50 @@ public class LevelClientPacket {
                     EnchantmentRegistry.ENCHANTMENTS.put(key, new EnchantmentZ(entry, level));
                 }
                 EnchantmentRegistry.INDEX_ENCHANTMENTS.putAll(indexed);
+            });
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(SkillProgressPacket.PACKET_ID, (payload, context) -> {
+            int skillId = payload.skillId();
+            float progress = payload.progress();
+
+            context.client().execute(() -> {
+                LevelManager levelManager = ((LevelManagerAccess) context.player()).getLevelManager();
+                levelManager.setSkillProgress(skillId, progress);
+
+                // Update UI if skill screen is open
+                if (context.client().currentScreen instanceof LevelScreen levelScreen) {
+                    levelScreen.updateSkillProgress();
+                }
+            });
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(SkillLevelUpPacket.PACKET_ID, (payload, context) -> {
+            int skillId = payload.skillId();
+            int level = payload.level();
+
+            context.client().execute(() -> {
+                LevelManager levelManager = ((LevelManagerAccess) context.player()).getLevelManager();
+                levelManager.setSkillLevel(skillId, level);
+
+                // Update UI
+                if (context.client().currentScreen instanceof LevelScreen levelScreen) {
+                    levelScreen.updateLevelButtons();
+                }
+
+                // Show level up notification
+                if (skillId >= 0 && skillId < LevelManager.SKILLS.size()) {
+                    Skill skill = LevelManager.SKILLS.get(skillId);
+                    Text skillName = skill.getText();
+                    Text notification = Text.translatable("text.levelz.skill_levelup",
+                            skillName,
+                            level);
+
+                    context.client().inGameHud.setOverlayMessage(notification, false);
+                    context.client().getSoundManager().play(
+                            PositionedSoundInstance.master(SoundEvents.ENTITY_PLAYER_LEVELUP, 1.0f)
+                    );
+                }
             });
         });
     }

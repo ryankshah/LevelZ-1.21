@@ -54,7 +54,14 @@
     "player.PlayerEntityMixin",
     "player.ServerPlayerEntityMixin",
     "player.ClientPlayerListS2CPacketMixin",
-    "player.PlayerManagerMixin"
+    "player.PlayerManagerMixin",
+    "passive.ProjectileEntityMixin",
+    "passive.AnimalEntityMixin",
+    "passive.EnchantmentScreenHandlerMixin",
+    "passive.AnvilScreenHandlerMixin",
+    "passive.CraftingScreenHandlerMixin",
+    "passive.FishingBobberEntityMixin",
+    "passive.MerchantEntityMixin"
   ],
   "client": [
     "misc.WorldRendererMixin",

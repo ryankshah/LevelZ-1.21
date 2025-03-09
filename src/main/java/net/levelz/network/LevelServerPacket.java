@@ -32,6 +32,9 @@ public class LevelServerPacket {
         PayloadTypeRegistry.playS2C().register(RestrictionPacket.PACKET_ID, RestrictionPacket.PACKET_CODEC);
         PayloadTypeRegistry.playS2C().register(EnchantmentZPacket.PACKET_ID, EnchantmentZPacket.PACKET_CODEC);
 
+        PayloadTypeRegistry.playS2C().register(SkillProgressPacket.PACKET_ID, SkillProgressPacket.PACKET_CODEC);
+        PayloadTypeRegistry.playS2C().register(SkillLevelUpPacket.PACKET_ID, SkillLevelUpPacket.PACKET_CODEC);
+
         PayloadTypeRegistry.playS2C().register(StatPacket.PACKET_ID, StatPacket.PACKET_CODEC);
         PayloadTypeRegistry.playC2S().register(StatPacket.PACKET_ID, StatPacket.PACKET_CODEC);
         PayloadTypeRegistry.playC2S().register(AttributeSyncPacket.PACKET_ID, AttributeSyncPacket.PACKET_CODEC);
@@ -77,13 +80,33 @@ public class LevelServerPacket {
             });
         });
 
-        ServerPlayNetworking.registerGlobalReceiver(AttributeSyncPacket.PACKET_ID, (payload, context) -> {
+//        ServerPlayNetworking.registerGlobalReceiver(AttributeSyncPacket.PACKET_ID, (payload, context) -> {
+//            context.server().execute(() -> {
+//                // Following are already synced
+//                // Collection<EntityAttributeInstance> collection = context.player().getAttributes().getAttributesToSend();
+//                // context.player().networkHandler.sendPacket(new EntityAttributesS2CPacket(context.player().getId(), collection));
+//                // Is required lul
+//                context.player().networkHandler.sendPacket(new EntityAttributesS2CPacket(context.player().getId(), List.of(context.player().getAttributeInstance(EntityAttributes.GENERIC_ATTACK_DAMAGE))));
+//            });
+//        });
+
+        ServerPlayNetworking.registerGlobalReceiver(StatPacket.PACKET_ID, (payload, context) -> {
+            int id = payload.id();
+            int level = payload.level();
+
             context.server().execute(() -> {
-                // Following are already synced
-                // Collection<EntityAttributeInstance> collection = context.player().getAttributes().getAttributesToSend();
-                // context.player().networkHandler.sendPacket(new EntityAttributesS2CPacket(context.player().getId(), collection));
-                // Is required lul
-                context.player().networkHandler.sendPacket(new EntityAttributesS2CPacket(context.player().getId(), List.of(context.player().getAttributeInstance(EntityAttributes.GENERIC_ATTACK_DAMAGE))));
+                // This packet is now only used for admin commands or UI skill point allocation
+                // It's no longer the primary way to level up skills
+                LevelManager levelManager = ((LevelManagerAccess) context.player()).getLevelManager();
+
+                // Allow admins to manually set skill levels
+                if (context.player().hasPermissionLevel(2)) {
+                    Skill skill = LevelManager.SKILLS.get(id);
+                    levelManager.setSkillLevel(id, level);
+                    LevelHelper.updateSkill(context.player(), skill);
+                    PacketHelper.updateLevels(context.player());
+                    ServerPlayNetworking.send(context.player(), new StatPacket(id, levelManager.getSkillLevel(id)));
+                }
             });
         });
     }

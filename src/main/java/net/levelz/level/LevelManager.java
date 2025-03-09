@@ -30,6 +30,7 @@ public class LevelManager {
     public static final Map<Integer, PlayerRestriction> MINING_RESTRICTIONS = new HashMap<>();
     public static final Map<Integer, PlayerRestriction> ENCHANTMENT_RESTRICTIONS = new HashMap<>();
     public static final Map<String, SkillBonus> BONUSES = new HashMap<>();
+    private Map<Integer, Float> skillProgressMap = new HashMap<>();
 
     private final PlayerEntity playerEntity;
     private Map<Integer, PlayerSkill> playerSkills = new HashMap<>();
@@ -56,6 +57,14 @@ public class LevelManager {
         return playerEntity;
     }
 
+    public float getSkillProgress(int skillId) {
+        return this.skillProgressMap.getOrDefault(skillId, 0.0F);
+    }
+
+    public void setSkillProgress(int skillId, float progress) {
+        this.skillProgressMap.put(skillId, progress);
+    }
+
     public void readNbt(NbtCompound nbt) {
         this.overallLevel = nbt.getInt("Level");
         this.levelProgress = nbt.getFloat("LevelProgress");
@@ -71,6 +80,20 @@ public class LevelManager {
             playerSkills.put(skill.getId(), skill);
         }
 
+        // Add loading of skill progress
+        if (nbt.contains("SkillProgress", NbtElement.COMPOUND_TYPE)) {
+            NbtCompound skillProgressNbt = nbt.getCompound("SkillProgress");
+            for (String key : skillProgressNbt.getKeys()) {
+                int skillId = Integer.parseInt(key);
+                float progress = skillProgressNbt.getFloat(key);
+                this.skillProgressMap.put(skillId, progress);
+            }
+        } else {
+            // Initialize progress map for all skills if not present
+            for (int skillId : SKILLS.keySet()) {
+                this.skillProgressMap.put(skillId, 0.0F);
+            }
+        }
     }
 
     public void writeNbt(NbtCompound nbt) {
@@ -84,6 +107,13 @@ public class LevelManager {
             skills.add(skill.writeDataToNbt());
         }
         nbt.put("Skills", skills);
+
+        // Add saving of skill progress
+        NbtCompound skillProgressNbt = new NbtCompound();
+        for (Map.Entry<Integer, Float> entry : this.skillProgressMap.entrySet()) {
+            skillProgressNbt.putFloat(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        nbt.put("SkillProgress", skillProgressNbt);
     }
 
     public Map<Integer, PlayerSkill> getPlayerSkills() {
@@ -131,18 +161,80 @@ public class LevelManager {
     }
 
     public int getSkillLevel(int skillId) {
-        // Maybe add a containsKey check here
         return this.playerSkills.get(skillId).getLevel();
     }
 
-    public void addExperienceLevels(int levels) {
-        this.overallLevel += levels;
-        this.skillPoints += ConfigInit.CONFIG.pointsPerLevel;
-        if (this.overallLevel < 0) {
-            this.overallLevel = 0;
-            this.levelProgress = 0.0F;
-            this.totalLevelExperience = 0;
+    /**
+     * Add passive experience to a skill
+     * @param skillId The ID of the skill to add experience to
+     * @param amount The amount of experience to add
+     * @return True if the skill leveled up
+     */
+    public boolean addSkillExperience(int skillId, int amount) {
+        if (!this.playerSkills.containsKey(skillId)) {
+            return false;
         }
+
+        PlayerSkill skill = this.playerSkills.get(skillId);
+        int currentLevel = skill.getLevel();
+
+        // Calculate XP needed for next level
+        int xpForNextLevel = getXpRequiredForLevel(currentLevel + 1);
+
+        // Add experience and check for level up
+        float progressBefore = this.getSkillProgress(skillId);
+        skill.setCurrentXp(skill.getCurrentXp() + amount);
+        float newProgress = (float) skill.getCurrentXp() / xpForNextLevel;
+        this.setSkillProgress(skillId, newProgress);
+
+        // Check for level up
+        boolean leveledUp = false;
+        if (newProgress >= 1.0f && currentLevel < SKILLS.get(skillId).getMaxLevel()) {
+            // Level up the skill
+            int remainingXp = skill.getCurrentXp() - xpForNextLevel;
+            skill.setLevel(currentLevel + 1);
+            skill.setCurrentXp(remainingXp);
+
+            // Update progress for new level
+            int nextLevelXp = getXpRequiredForLevel(skill.getLevel() + 1);
+            float remainingProgress = (float) remainingXp / nextLevelXp;
+            this.setSkillProgress(skillId, remainingProgress);
+
+            // Update attributes and send notifications
+            if (this.playerEntity instanceof ServerPlayerEntity serverPlayer) {
+                LevelHelper.updateSkill(serverPlayer, SKILLS.get(skillId));
+                PacketHelper.sendLevelUpNotification(serverPlayer, skillId);
+            }
+
+            leveledUp = true;
+
+            // Check if more level ups are available with remaining XP
+            if (remainingXp >= nextLevelXp) {
+                addSkillExperience(skillId, 0); // Recalculate with existing XP
+            }
+        }
+
+        // Send skill progress update
+        if (this.playerEntity instanceof ServerPlayerEntity serverPlayer) {
+            PacketHelper.updateSkillExperience(serverPlayer, skillId);
+        }
+
+        return leveledUp;
+    }
+
+    /**
+     * Calculate XP required for a specific level using the formula from config
+     */
+    private int getXpRequiredForLevel(int level) {
+        int experienceCost = (int) (ConfigInit.CONFIG.xpBaseCost +
+                ConfigInit.CONFIG.xpCostMultiplicator *
+                        Math.pow(level, ConfigInit.CONFIG.xpExponent));
+
+        if (ConfigInit.CONFIG.xpMaxCost != 0) {
+            return Math.min(experienceCost, ConfigInit.CONFIG.xpMaxCost);
+        }
+
+        return experienceCost;
     }
 
     public boolean isMaxLevel() {
@@ -312,17 +404,29 @@ public class LevelManager {
         return Map.of(0, 0);
     }
 
+    /**
+     * Reset a skill to level 0 and return the skill points
+     */
     public boolean resetSkill(int skillId) {
         int level = this.getSkillLevel(skillId);
         if (level > 0) {
             this.setSkillPoints(this.getSkillPoints() + level);
             this.setSkillLevel(skillId, 0);
-            PacketHelper.updatePlayerSkills((ServerPlayerEntity) this.playerEntity, null);
-            LevelHelper.updateSkill((ServerPlayerEntity) this.playerEntity, SKILLS.get(skillId));
+
+            // Reset skill progress
+            this.playerSkills.get(skillId).setCurrentXp(0);
+            this.setSkillProgress(skillId, 0);
+
+            // Update client
+            if (this.playerEntity instanceof ServerPlayerEntity serverPlayer) {
+                PacketHelper.updatePlayerSkills(serverPlayer, null);
+                LevelHelper.updateSkill(serverPlayer, SKILLS.get(skillId));
+                PacketHelper.updateSkillExperience(serverPlayer, skillId);
+            }
+
             return true;
         } else {
             return false;
         }
     }
-
 }

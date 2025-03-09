@@ -229,8 +229,34 @@ public class LevelScreen extends Screen implements Tab {
             Text skillLevel = Text.translatable("text.levelz.gui.current_level", this.levelManager.getSkillLevel(skillId), LevelManager.SKILLS.get(skillId).getMaxLevel());
             context.drawText(this.textRenderer, skillLevel, this.x + (i % 2 == 0 ? 53 : 141) - this.textRenderer.getWidth(skillLevel) / 2, this.y + 94 + i / 2 * 20, 0x3F3F3F, false);
 
+            // Draw skill progress bar (new)
+            float progress = this.levelManager.getSkillProgress(skillId);
+            int barWidth = 80;
+            int barX = this.x + (i % 2 == 0 ? 13 : 101);
+            int barY = this.y + 105 + i / 2 * 20;
+
+            // Background bar (darker)
+            context.fill(barX, barY, barX + barWidth, barY + 2, 0xFF555555);
+
+            // Filled portion (brighter)
+            if (progress > 0) {
+                int filledWidth = (int)(barWidth * progress);
+                int barColor = 0xFF00AAFF; // Blue color for skill progress
+                context.fill(barX, barY, barX + filledWidth, barY + 2, barColor);
+            }
+
             if (isPointWithinBounds(this.x + (i % 2 == 0 ? 11 : 99), this.y + 89 + i / 2 * 20, 16, 16, mouseX, mouseY)) {
-                context.drawTooltip(this.textRenderer, LevelManager.SKILLS.get(skillId).getText(), mouseX, mouseY);
+                // Show skill info and progress in tooltip
+                List<Text> tooltipLines = new ArrayList<>();
+                tooltipLines.add(LevelManager.SKILLS.get(skillId).getText());
+
+                // Add progress info
+                int currentXp = this.levelManager.getPlayerSkills().get(skillId).getCurrentXp();
+                int nextLevelXp = calculateXpForLevel(this.levelManager.getSkillLevel(skillId) + 1);
+                tooltipLines.add(Text.literal(String.format("Progress: %d / %d XP (%.1f%%)",
+                        currentXp, nextLevelXp, progress * 100)));
+
+                context.drawTooltip(this.textRenderer, tooltipLines, mouseX, mouseY);
             }
         }
         if (this.levelManager.getPlayerSkills().size() > 12) {
@@ -247,6 +273,21 @@ public class LevelScreen extends Screen implements Tab {
         DrawTabHelper.drawTab(client, context, this, this.x, this.y, mouseX, mouseY);
     }
 
+    /**
+     * Calculate XP required for a specific level
+     */
+    private int calculateXpForLevel(int level) {
+        int experienceCost = (int) (ConfigInit.CONFIG.xpBaseCost +
+                ConfigInit.CONFIG.xpCostMultiplicator *
+                        Math.pow(level, ConfigInit.CONFIG.xpExponent));
+
+        if (ConfigInit.CONFIG.xpMaxCost != 0) {
+            return Math.min(experienceCost, ConfigInit.CONFIG.xpMaxCost);
+        } else {
+            return experienceCost;
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -260,6 +301,16 @@ public class LevelScreen extends Screen implements Tab {
             } else {
                 this.turnClientPlayer = false;
             }
+        }
+    }
+
+    /**
+     * Updates the skill progress visuals
+     */
+    public void updateSkillProgress() {
+        // Force a redraw of the screen
+        if (this.client != null) {
+            this.client.setScreen(this);
         }
     }
 
@@ -380,7 +431,11 @@ public class LevelScreen extends Screen implements Tab {
                 this.levelButtons[i].visible = true;
             }
 
+            // Disable level-up buttons since skills progress passively
+            this.levelButtons[i].active = false;
 
+            // Old skill point logic - now disabled
+            /*
             if (ConfigInit.CONFIG.overallMaxLevel > 0 && this.levelManager.getOverallLevel() >= ConfigInit.CONFIG.overallMaxLevel) {
                 this.levelButtons[i].active = false;
             } else if (LevelManager.SKILLS.get(skillId).getMaxLevel() <= this.levelManager.getPlayerSkills().get(skillId).getLevel()) {
@@ -400,6 +455,7 @@ public class LevelScreen extends Screen implements Tab {
                     this.levelButtons[i].active = true;
                 }
             }
+            */
         }
     }
 

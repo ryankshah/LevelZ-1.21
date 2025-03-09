@@ -223,5 +223,26 @@
   "advancements.adventure.level_100.title": "Level 100",
   "advancements.adventure.level_100.description": "Reach the unreachable level",
 
-  "tag.levelz.restricted_furnace_experience_items": "Restricted Furnace Experience Items"
+  "tag.levelz.restricted_furnace_experience_items": "Restricted Furnace Experience Items",
+
+
+  "text.levelz.passive_progression": "Passive Skill Progression",
+  "text.levelz.passive_progression.desc": "Skills improve naturally as you perform related actions.",
+  "text.levelz.progress_info": "Progress: %d / %d XP (%s)",
+
+  "text.levelz.passive_progression.constitution": "Actions: Healing, taking damage, eating food",
+  "text.levelz.passive_progression.melee": "Actions: Fighting with melee weapons, dealing damage",
+  "text.levelz.passive_progression.defense": "Actions: Taking damage, blocking with shields",
+  "text.levelz.passive_progression.archery": "Actions: Shooting bows, crossbows, hitting targets",
+  "text.levelz.passive_progression.agility": "Actions: Sprinting, jumping, swimming",
+  "text.levelz.passive_progression.magic": "Actions: Enchanting, brewing potions, using magical items",
+  "text.levelz.passive_progression.mining": "Actions: Mining ores, stone, breaking blocks",
+  "text.levelz.passive_progression.smithing": "Actions: Crafting tools/weapons, using anvils, smelting",
+  "text.levelz.passive_progression.farming": "Actions: Harvesting crops, breeding animals",
+  "text.levelz.passive_progression.cooking": "Actions: Cooking food, using furnaces for food",
+  "text.levelz.passive_progression.bartering": "Actions: Trading with villagers, using emeralds",
+  "text.levelz.passive_progression.luck": "Actions: Fishing, finding rare loot",
+
+  "text.levelz.skill_levelup": "§e%s §rLeveled Up to §a%d§r!",
+  "restriction.levelz.locked.tooltip": "§cYou don't have the required skill level to use this."
 }

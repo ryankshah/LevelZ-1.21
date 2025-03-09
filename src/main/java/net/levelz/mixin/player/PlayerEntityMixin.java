@@ -3,6 +3,7 @@ package net.levelz.mixin.player;
 import net.levelz.access.LevelManagerAccess;
 import net.levelz.access.PlayerDropAccess;
 import net.levelz.entity.LevelExperienceOrbEntity;
+import net.levelz.experience.SkillExperienceManager;
 import net.levelz.init.ConfigInit;
 import net.levelz.level.LevelManager;
 import net.levelz.util.BonusHelper;
@@ -15,6 +16,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.tag.DamageTypeTags;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
@@ -39,6 +41,9 @@ public abstract class PlayerEntityMixin extends LivingEntity implements LevelMan
     @Unique
     @Nullable
     private Chunk killedMobChunk;
+
+    @Unique
+    private int movementCounter = 0;
 
     public PlayerEntityMixin(EntityType<? extends LivingEntity> entityType, World world) {
         super(entityType, world);
@@ -151,4 +156,76 @@ public abstract class PlayerEntityMixin extends LivingEntity implements LevelMan
         super.dropXp(attacker);
     }
 
+    /**
+     * Track player movement for agility skill
+     */
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void tickMixin(CallbackInfo info) {
+        // Only track on server side
+        if (this.getWorld().isClient()) {
+            return;
+        }
+
+        PlayerEntity player = (PlayerEntity)(Object)this;
+
+        // Track movement for agility XP
+        if (player.isSprinting() && player.isOnGround() && !player.isCreative()) {
+            movementCounter++;
+
+            // Award agility XP after sprinting a certain distance
+            if (movementCounter >= 100) { // Every ~5 seconds of sprinting
+                movementCounter = 0;
+                SkillExperienceManager.getInstance().awardSkillXp(
+                        player, 4, 1, SkillExperienceManager.SkillXpType.AGILITY_MOVEMENT);
+            }
+        }
+    }
+
+    /**
+     * Add constitution XP when using health potions or food to heal
+     */
+    @Inject(method = "eatFood", at = @At("TAIL"))
+    private void healMixin(World world, ItemStack stack, FoodComponent foodComponent, CallbackInfoReturnable<ItemStack> cir) {
+        if (foodComponent.nutrition() > 0 && !this.getWorld().isClient() && !((PlayerEntity)(Object)this).isCreative()) {
+            PlayerEntity player = (PlayerEntity)(Object)this;
+
+            // Award constitution XP based on amount healed
+            int healXp = Math.max(1, (int)(foodComponent.nutrition() / 2));
+            SkillExperienceManager.getInstance().awardSkillXp(
+                    player, 0, healXp, SkillExperienceManager.SkillXpType.DEFENSE_DAMAGE_TAKEN);
+        }
+    }
+
+    /**
+     * Update overall level calculation based on combat skills
+     */
+    @Inject(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/PlayerEntity;updateTurtleHelmet()V"))
+    private void updateOverallLevelMixin(CallbackInfo info) {
+        if (this.getWorld().isClient() || ((PlayerEntity)(Object)this).isCreative()) {
+            return;
+        }
+
+        // Update overall level every 20 ticks (1 second)
+        if (this.age % 20 == 0) {
+            PlayerEntity player = (PlayerEntity)(Object)this;
+            LevelManager levelManager = ((LevelManagerAccess)player).getLevelManager();
+
+            // Calculate average of combat skills
+            int meleeLevel = levelManager.getSkillLevel(1);   // Melee
+            int defenseLevel = levelManager.getSkillLevel(2); // Defense
+            int magicLevel = levelManager.getSkillLevel(5);   // Magic
+
+            int newOverallLevel = Math.round((meleeLevel + defenseLevel + magicLevel) / 3.0f);
+
+            // Only update if changed
+            if (newOverallLevel != levelManager.getOverallLevel()) {
+                levelManager.setOverallLevel(newOverallLevel);
+
+                // This is a server player, so we can send the update packet
+                if (player instanceof ServerPlayerEntity) {
+                    net.levelz.util.PacketHelper.updateLevels((ServerPlayerEntity)player);
+                }
+            }
+        }
+    }
 }

@@ -2,11 +2,13 @@ package net.levelz.util;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.levelz.access.LevelManagerAccess;
+import net.levelz.init.CriteriaInit;
 import net.levelz.level.*;
 import net.levelz.network.packet.*;
 import net.levelz.registry.EnchantmentRegistry;
 import net.levelz.registry.EnchantmentZ;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.sound.SoundEvents;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -82,5 +84,45 @@ public class PacketHelper {
             levels.add(entry.getValue().getLevel());
         }
         ServerPlayNetworking.send(serverPlayerEntity, new EnchantmentZPacket(EnchantmentRegistry.INDEX_ENCHANTMENTS, keys, ids, levels));
+    }
+
+    /**
+     * Sends skill experience update to client
+     */
+    public static void updateSkillExperience(ServerPlayerEntity serverPlayerEntity, int skillId) {
+        LevelManager levelManager = ((LevelManagerAccess) serverPlayerEntity).getLevelManager();
+        float progress = levelManager.getSkillProgress(skillId);
+
+        // Create and send a packet to update the client's skill progress
+        ServerPlayNetworking.send(serverPlayerEntity, new SkillProgressPacket(skillId, progress));
+    }
+
+    /**
+     * Sends level up notification to client
+     */
+    public static void sendLevelUpNotification(ServerPlayerEntity serverPlayerEntity, int skillId) {
+        LevelManager levelManager = ((LevelManagerAccess) serverPlayerEntity).getLevelManager();
+        int level = levelManager.getSkillLevel(skillId);
+
+        // Create and send a packet for level up notification
+        ServerPlayNetworking.send(serverPlayerEntity, new SkillLevelUpPacket(skillId, level));
+
+        // Trigger advancement criteria for skill level up
+        if (skillId >= 0 && skillId < LevelManager.SKILLS.size()) {
+            CriteriaInit.SKILL_UP.trigger(serverPlayerEntity,
+                    LevelManager.SKILLS.get(skillId).getKey(), level);
+        }
+
+        // Play level up sound
+        serverPlayerEntity.getWorld().playSound(
+                null,
+                serverPlayerEntity.getX(),
+                serverPlayerEntity.getY(),
+                serverPlayerEntity.getZ(),
+                SoundEvents.ENTITY_PLAYER_LEVELUP,
+                serverPlayerEntity.getSoundCategory(),
+                1.0F,
+                1.0F
+        );
     }
 }

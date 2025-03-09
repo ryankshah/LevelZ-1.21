@@ -52,6 +52,24 @@ public class SkillInfoScreen extends Screen implements Tab {
         this.x = (this.width - this.backgroundWidth) / 2;
         this.y = (this.height - this.backgroundHeight) / 2;
 
+        // Add passive progression information (new)
+        this.lines.add(new LineWidget(this.client, Text.translatable("text.levelz.passive_progression"), null, 0));
+        this.lines.add(new LineWidget(this.client, Text.translatable("text.levelz.passive_progression.desc"), null, 0));
+
+        // Add common actions that award XP for this skill
+        String actionsKey = "text.levelz.passive_progression." + this.skill.getKey();
+        this.lines.add(new LineWidget(this.client, Text.translatable(actionsKey), null, 0));
+
+        // Add progress information (new)
+        int currentLevel = this.levelManager.getSkillLevel(this.skill.getId());
+        int currentXp = this.levelManager.getPlayerSkills().get(this.skill.getId()).getCurrentXp();
+        int nextLevelXp = calculateXpForLevel(currentLevel + 1);
+        float progress = this.levelManager.getSkillProgress(this.skill.getId());
+
+        this.lines.add(new LineWidget(this.client, Text.translatable("text.levelz.progress_info",
+                currentXp, nextLevelXp, String.format("%.1f", progress * 100) + "%"), null, 0));
+
+        // Add skill description
         for (int i = 0; i < 50; i++) {
             String skillExtra = "skill.levelz." + this.skill.getKey() + "." + i;
             Text skillExtraText = Text.translatable(skillExtra);
@@ -61,8 +79,8 @@ public class SkillInfoScreen extends Screen implements Tab {
             }
             this.lines.add(new LineWidget(this.client, skillExtraText, null, 0));
         }
-        if (!this.lines.isEmpty()) {
-            this.lines.addFirst(new LineWidget(this.client, Text.translatable("skill.levelz.info"), null, 0));
+        if (this.lines.size() > 4) {
+            this.lines.add(4, new LineWidget(this.client, Text.translatable("skill.levelz.info"), null, 0));
         }
         int skillInfoLines = this.lines.size();
         for (String bonusKey : SkillBonus.BONUS_KEYS) {
@@ -92,6 +110,21 @@ public class SkillInfoScreen extends Screen implements Tab {
         addRestrictionLines(LevelManager.BLOCK_RESTRICTIONS, Text.translatable("restriction.levelz.block_usage"), 1);
         addRestrictionLines(LevelManager.ENTITY_RESTRICTIONS, Text.translatable("restriction.levelz.entity_usage"), 2);
         addRestrictionLines(LevelManager.ENCHANTMENT_RESTRICTIONS, Text.translatable("restriction.levelz.enchantments"), 3);
+    }
+
+    /**
+     * Calculate XP required for a specific level
+     */
+    private int calculateXpForLevel(int level) {
+        int experienceCost = (int) (ConfigInit.CONFIG.xpBaseCost +
+                ConfigInit.CONFIG.xpCostMultiplicator *
+                        Math.pow(level, ConfigInit.CONFIG.xpExponent));
+
+        if (ConfigInit.CONFIG.xpMaxCost != 0) {
+            return Math.min(experienceCost, ConfigInit.CONFIG.xpMaxCost);
+        } else {
+            return experienceCost;
+        }
     }
 
     private void addRestrictionLines(Map<Integer, PlayerRestriction> levelRestrictions, Text restrictionText, int code) {
@@ -156,13 +189,30 @@ public class SkillInfoScreen extends Screen implements Tab {
         context.drawText(this.textRenderer, this.title, this.x + 7, this.y + 7, 0x3F3F3F, false);
         context.drawText(this.textRenderer, Text.translatable("text.levelz.gui.short_level", this.levelManager.getSkillLevel(this.skill.getId())), this.x + 11 + this.textRenderer.getWidth(this.title), this.y + 7, 0x3F3F3F, false);
 
+        // Show visual progress bar
+        float progress = this.levelManager.getSkillProgress(this.skill.getId());
+        int barWidth = 180;
+        int barX = this.x + 10;
+        int barY = this.y + 20;
+
+        // Background bar (darker)
+        context.fill(barX, barY, barX + barWidth, barY + 3, 0xFF555555);
+
+        // Filled portion (brighter)
+        if (progress > 0) {
+            int filledWidth = (int)(barWidth * progress);
+            int barColor = 0xFF00AAFF; // Blue color for skill progress
+            context.fill(barX, barY, barX + filledWidth, barY + 3, barColor);
+        }
+
+        // Render the skill information lines
         for (int i = 0; i < 10; i++) {
             if (this.lines.size() <= i) {
                 break;
             }
             int index = this.lineIndex + i;
 
-            this.lines.get(index).render(context, this.x + 12, this.y + 24 + i * 18, mouseX, mouseY);
+            this.lines.get(index).render(context, this.x + 12, this.y + 30 + i * 18, mouseX, mouseY);
         }
     }
 
@@ -219,5 +269,4 @@ public class SkillInfoScreen extends Screen implements Tab {
 
         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
     }
-
 }

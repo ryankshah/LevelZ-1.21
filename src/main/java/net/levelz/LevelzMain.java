@@ -19,6 +19,8 @@ public class LevelzMain implements ModInitializer {
         LevelServerPacket.init();
         TagInit.init();
         ItemInit.init();
+
+        SkillEventHandlers.init();
     }
 
     public static Identifier identifierOf(String name) {

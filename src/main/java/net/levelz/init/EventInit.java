@@ -2,16 +2,18 @@ package net.levelz.init;
 
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
-import net.fabricmc.fabric.api.event.player.UseBlockCallback;
-import net.fabricmc.fabric.api.event.player.UseEntityCallback;
-import net.fabricmc.fabric.api.event.player.UseItemCallback;
+import net.fabricmc.fabric.api.event.player.*;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.levelz.access.LevelManagerAccess;
+import net.levelz.experience.SkillExperienceManager;
+import net.levelz.experience.SkillExperienceManager.SkillXpType;
 import net.levelz.level.LevelManager;
 import net.levelz.level.Skill;
 import net.levelz.mixin.entity.EntityAccessor;
 import net.levelz.util.LevelHelper;
 import net.levelz.util.PacketHelper;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.scoreboard.ScoreAccess;
@@ -66,19 +68,28 @@ public class EventInit {
             }
         });
 
+        // Add passive XP for item use
         UseItemCallback.EVENT.register((player, world, hand) -> {
-            if (!player.isCreative() && !player.isSpectator()) {
+            if (!world.isClient() && !player.isCreative()) {
                 LevelManager levelManager = ((LevelManagerAccess) player).getLevelManager();
-                if (!levelManager.hasRequiredItemLevel(player.getStackInHand(hand).getItem())) {
-                    // player.sendMessage(Text.translatable("item.levelz." + customList.get(customList.indexOf(string) + 1) +
-                    // ".tooltip", customList.get(customList.indexOf(string) + 2)).formatted(Formatting.RED), true);
+                ItemStack stack = player.getStackInHand(hand);
+
+                if (!levelManager.hasRequiredItemLevel(stack.getItem())) {
                     player.sendMessage(Text.translatable("restriction.levelz.locked.tooltip").formatted(Formatting.RED), true);
-                    return TypedActionResult.fail(player.getStackInHand(hand));
+                    return TypedActionResult.fail(stack);
+                }
+
+                // Add small amount of XP for using items
+                if (stack.get(DataComponentTypes.FOOD) != null) {
+                    // Cooking skill XP (ID 9)
+                    SkillExperienceManager.getInstance().awardSkillXp(
+                            player, 9, 1, SkillXpType.COOKING_FOOD);
                 }
             }
             return TypedActionResult.pass(ItemStack.EMPTY);
         });
 
+        // Add passive XP for block interactions
         UseBlockCallback.EVENT.register((player, world, hand, result) -> {
             if (!player.isCreative() && !player.isSpectator()) {
                 BlockPos blockPos = result.getBlockPos();
@@ -93,6 +104,7 @@ public class EventInit {
             return ActionResult.PASS;
         });
 
+        // Add passive XP for entity interactions
         UseEntityCallback.EVENT.register((player, world, hand, entity, entityHitResult) -> {
             if (!player.isCreative() && !player.isSpectator()) {
                 if (!entity.hasControllingPassenger() || !((EntityAccessor) entity).callCanAddPassenger(player)) {
@@ -101,10 +113,29 @@ public class EventInit {
                         player.sendMessage(Text.translatable("restriction.levelz.locked.tooltip").formatted(Formatting.RED), true);
                         return ActionResult.success(false);
                     }
+
+                    // Add XP for certain entity interactions (only on server)
+                    if (!world.isClient()) {
+                        // If interacting with hostile entity, add small amount of defense XP
+                        if (entity instanceof HostileEntity) {
+                            SkillExperienceManager.getInstance().awardSkillXp(
+                                    player, 2, 1, SkillXpType.DEFENSE_DAMAGE_TAKEN);
+                        }
+                    }
                 }
             }
             return ActionResult.PASS;
         });
-    }
 
+        // Add attack XP event
+        AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            // This will be handled by our mixins for more detailed damage tracking
+            return ActionResult.PASS;
+        });
+
+        // Register block break events for mining XP
+        PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
+            // This will be handled by our SkillEventHandlers
+        });
+    }
 }

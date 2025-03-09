@@ -41,7 +41,8 @@ public abstract class ServerPlayerEntityMixin extends PlayerEntity implements Se
 
             while (levelManager.getLevelProgress() >= 1.0F && !levelManager.isMaxLevel()) {
                 levelManager.setLevelProgress((levelManager.getLevelProgress() - 1.0F) * (float) levelManager.getNextLevelExperience());
-                levelManager.addExperienceLevels(1);
+                levelManager.setOverallLevel(levelManager.getOverallLevel() + 1);
+                levelManager.setSkillPoints(levelManager.getSkillPoints() + 0); // No skill points from levels anymore
                 levelManager.setLevelProgress(levelManager.getLevelProgress() / levelManager.getNextLevelExperience());
 
                 PacketHelper.updateLevels(serverPlayerEntity);
@@ -56,13 +57,27 @@ public abstract class ServerPlayerEntityMixin extends PlayerEntity implements Se
         this.syncedLevelExperience = -1;
     }
 
+    /**
+     * Directly add passive skill experience to a specific skill
+     * Used by our SkillExperienceManager to add skill XP for various actions
+     *
+     * @param skillId The skill ID to add XP to
+     * @param amount The amount of XP to add
+     * @return True if the skill leveled up
+     */
+    @Unique
+    public boolean addSkillExperience(int skillId, int amount) {
+        if (!this.getWorld().isClient() && !this.isCreative()) {
+            return levelManager.addSkillExperience(skillId, amount);
+        }
+        return false;
+    }
+
     @Inject(method = "playerTick", at = @At(value = "FIELD", target = "Lnet/minecraft/server/network/ServerPlayerEntity;totalExperience:I", ordinal = 0, shift = At.Shift.BEFORE))
     private void playerTickMixin(CallbackInfo info) {
         if (levelManager.getTotalLevelExperience() != this.syncedLevelExperience) {
             this.syncedLevelExperience = levelManager.getTotalLevelExperience();
             PacketHelper.updateLevels((ServerPlayerEntity) (Object) this);
         }
-
     }
-
 }
